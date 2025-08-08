@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class DocumentIndexer:
     """Manage document indexing with LanceDB."""
     
-    def __init__(self, db_path: Path, embedding_model: str = "all-MiniLM-L6-v2"):
+    def __init__(self, db_path: Path, embedding_model: str):
         self.db_path = db_path
         self.embedding_model_name = embedding_model
         self.embedding_model = None

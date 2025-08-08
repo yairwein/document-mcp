@@ -227,7 +227,7 @@ class OllamaInstaller:
             return False
     
     @staticmethod
-    async def ensure_ollama_ready(model_name: str = "llama3.2:3b") -> Tuple[bool, str]:
+    async def ensure_ollama_ready(model_name: str) -> Tuple[bool, str]:
         """
         Ensure Ollama is installed, running, and has the required model.
         
@@ -272,7 +272,7 @@ class OllamaInstaller:
         return True, "Ollama is ready"
 
 
-async def setup_ollama(model_name: str = "llama3.2:3b") -> bool:
+async def setup_ollama(model_name: str) -> bool:
     """
     Convenience function to set up Ollama.
     

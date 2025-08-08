@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class LocalLLM:
     """Interface to local LLM via Ollama."""
     
-    def __init__(self, model: str = "llama3.2:3b", base_url: str = "http://localhost:11434"):
+    def __init__(self, model: str, base_url: str):
         self.model = model
         self.base_url = base_url
         self.client = None

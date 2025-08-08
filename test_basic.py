@@ -57,7 +57,7 @@ async def test_basic():
         
         # Test LLM (will use fallback if Ollama not available)
         print("\n2. Testing Local LLM...")
-        llm = LocalLLM()
+        llm = LocalLLM(model=config.llm_model, base_url=config.ollama_base_url)
         await llm.initialize()
         processor = DocumentProcessor(llm)
         
@@ -69,7 +69,7 @@ async def test_basic():
         print("\n3. Testing Document Indexer...")
         indexer = DocumentIndexer(
             db_path=config.lancedb_path,
-            embedding_model="all-MiniLM-L6-v2"
+            embedding_model=config.embedding_model
         )
         await indexer.initialize()
         

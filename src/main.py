@@ -7,6 +7,7 @@ import signal
 import sys
 import subprocess
 import time
+import os
 from pathlib import Path
 from typing import Optional
 from fastmcp import FastMCP
@@ -96,27 +97,33 @@ class DocumentIndexerService:
     async def index_file(self, file_path: Path) -> bool:
         """Index a single file."""
         try:
+            logger.info(f"  → Starting processing: {file_path.name}")
+            
             # Check file size
             file_size_mb = file_path.stat().st_size / (1024 * 1024)
             if file_size_mb > self.config.max_file_size_mb:
-                logger.warning(f"File too large ({file_size_mb:.1f}MB): {file_path}")
+                logger.warning(f"  → Skipping: File too large ({file_size_mb:.1f}MB > {self.config.max_file_size_mb}MB)")
                 return False
             
-            logger.info(f"Indexing: {file_path}")
+            logger.info(f"  → [1/4] Parsing document ({file_size_mb:.2f}MB)...")
             
             # Parse document
             doc_data = self.parser.parse_file(file_path)
+            logger.info(f"  → [1/4] ✓ Parsed: {doc_data['total_chars']:,} chars, {doc_data['num_chunks']} chunks, {doc_data['total_tokens']:,} tokens")
             
             # Process with LLM
+            logger.info(f"  → [2/4] Processing with LLM ({self.config.llm_model})...")
             doc_data = await self.processor.process_document(doc_data)
+            logger.info(f"  → [2/4] ✓ Generated summary ({len(doc_data.get('summary', ''))} chars) and {len(doc_data.get('keywords', []))} keywords")
             
             # Index document
+            logger.info(f"  → [3/4] Generating embeddings and indexing to LanceDB...")
             success = await self.indexer.index_document(doc_data)
             
             if success:
-                logger.info(f"Successfully indexed: {file_path}")
+                logger.info(f"  → [4/4] ✓ Successfully indexed document with {doc_data['num_chunks']} chunks")
             else:
-                logger.info(f"Document unchanged: {file_path}")
+                logger.info(f"  → [4/4] ⟳ Document unchanged (already indexed)")
             
             return success
             
@@ -127,21 +134,42 @@ class DocumentIndexerService:
     
     async def process_indexing_queue(self):
         """Process files in the indexing queue."""
+        processed_count = 0
+        total_to_process = 0
+        
         while self.running:
             try:
                 # Get next file from queue
                 file_path = await self.indexing_queue.get_next()
                 
                 if file_path:
+                    # Log progress
+                    queue_stats = self.indexing_queue.get_stats()
+                    if processed_count == 0:
+                        total_to_process = queue_stats['queued'] + queue_stats['processing']
+                    
+                    processed_count += 1
+                    logger.info(f"[{processed_count}/{total_to_process}] Processing: {file_path.name}")
+                    
                     success = await self.index_file(file_path)
                     if success:
                         self.indexing_queue.mark_complete(file_path)
+                        logger.info(f"[{processed_count}/{total_to_process}] ✓ Indexed: {file_path.name}")
+                    else:
+                        self.indexing_queue.mark_complete(file_path)
+                        logger.info(f"[{processed_count}/{total_to_process}] ⟳ Unchanged: {file_path.name}")
+                    
+                    # Log queue status every 10 files
+                    if processed_count % 10 == 0:
+                        logger.info(f"Progress: {processed_count} processed, {queue_stats['queued']} remaining in queue")
                 else:
                     # No files to process, wait a bit
                     await asyncio.sleep(1)
                     
             except Exception as e:
-                logger.error(f"Error in indexing queue: {e}")
+                logger.error(f"Error processing file: {e}")
+                if file_path:
+                    self.indexing_queue.mark_failed(file_path, str(e))
                 await asyncio.sleep(1)
     
     async def initial_scan(self):
@@ -152,12 +180,22 @@ class DocumentIndexerService:
         logger.info("Starting initial document scan...")
         existing_files = await self.monitor.scan_existing_files()
         
+        # Limit initial scan for large folders
+        max_initial_files = int(os.getenv("MAX_INITIAL_FILES", "50"))
+        if len(existing_files) > max_initial_files:
+            logger.warning(f"Found {len(existing_files)} files, limiting initial scan to {max_initial_files} most recent files")
+            logger.info("Set MAX_INITIAL_FILES env var to increase this limit")
+            # Sort by modification time and take most recent
+            existing_files = sorted(existing_files, key=lambda x: x.stat().st_mtime, reverse=True)[:max_initial_files]
+        
         # Add files to indexing queue with lower priority
+        added_count = 0
         for file_path in existing_files:
             if is_supported_file(file_path, self.config.file_extensions):
                 await self.indexing_queue.add_file(file_path, priority=8)
+                added_count += 1
         
-        logger.info(f"Added {len(existing_files)} files to indexing queue")
+        logger.info(f"Added {added_count} files to indexing queue")
     
     async def start(self):
         """Start the service."""

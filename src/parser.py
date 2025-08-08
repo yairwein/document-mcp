@@ -20,11 +20,17 @@ class DocumentParser:
     
     def parse_file(self, file_path: Path) -> Dict[str, Any]:
         """Parse a file and extract its content and metadata."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
         
         file_stats = file_path.stat()
         file_hash = self._calculate_file_hash(file_path)
+        file_type = file_path.suffix.lower()
+        
+        logger.info(f"    → Extracting text from {file_type} file...")
         
         metadata = {
             "file_path": str(file_path),
@@ -32,12 +38,14 @@ class DocumentParser:
             "file_size": file_stats.st_size,
             "modified_time": datetime.fromtimestamp(file_stats.st_mtime).isoformat(),
             "file_hash": file_hash,
-            "file_type": file_path.suffix.lower()
+            "file_type": file_type
         }
         
         # Extract text based on file type
         text = self._extract_text(file_path)
+        logger.info(f"    → Extracted {len(text):,} characters")
         
+        logger.info(f"    → Creating text chunks (size: {self.chunk_size}, overlap: {self.chunk_overlap})...")
         # Create chunks
         chunks = self._create_chunks(text)
         
@@ -133,20 +141,34 @@ class DocumentParser:
     
     def _create_chunks(self, text: str) -> List[Dict[str, Any]]:
         """Create overlapping chunks from text."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
         if not text:
             return []
+        
+        text_length = len(text)
+        estimated_chunks = (text_length // self.chunk_size) + 1
+        logger.info(f"    → Estimated {estimated_chunks} chunks for {text_length:,} characters")
         
         chunks = []
         start = 0
         chunk_id = 0
+        last_progress = 0
         
-        while start < len(text):
+        while start < text_length:
+            # Progress logging every 10% or every 100 chunks
+            progress = int((start / text_length) * 100)
+            if progress >= last_progress + 10 or chunk_id % 100 == 0:
+                logger.info(f"    → Chunking progress: {progress}% ({chunk_id} chunks created)")
+                last_progress = progress
+            
             # Find the end of the chunk
-            end = start + self.chunk_size
+            end = min(start + self.chunk_size, text_length)
             
             # Try to break at sentence or paragraph boundary
-            if end < len(text):
-                # Look for paragraph break
+            if end < text_length:
+                # Look for paragraph break first (better boundary)
                 para_break = text.rfind('\n\n', start, end)
                 if para_break > start:
                     end = para_break
@@ -161,23 +183,33 @@ class DocumentParser:
             
             chunk_text = text[start:end].strip()
             if chunk_text:
+                # Only tokenize if chunk is not empty - this is the expensive operation
+                token_count = len(self.tokenizer.encode(chunk_text))
+                
                 chunks.append({
                     "chunk_id": chunk_id,
                     "text": chunk_text,
                     "start_pos": start,
                     "end_pos": end,
                     "char_count": len(chunk_text),
-                    "token_count": len(self.tokenizer.encode(chunk_text))
+                    "token_count": token_count
                 })
                 chunk_id += 1
             
-            # Move to next chunk with overlap
-            start = end - self.chunk_overlap if end < len(text) else end
+            # Move to next chunk with overlap, but ensure we make progress
+            new_start = max(end - self.chunk_overlap, start + 1)
+            if new_start <= start:
+                # Force progress to prevent infinite loop
+                new_start = start + max(1, self.chunk_size // 2)
             
-            # Prevent infinite loop
-            if start >= len(text) - 1:
+            start = new_start
+            
+            # Safety check to prevent infinite loops
+            if chunk_id > 10000:  # Reasonable limit
+                logger.warning(f"    → Chunk limit reached ({chunk_id}), stopping to prevent infinite loop")
                 break
         
+        logger.info(f"    → Created {len(chunks)} chunks")
         return chunks
 
 

@@ -241,8 +241,10 @@ class DocumentProcessor:
     async def process_document(self, doc_data: Dict[str, Any]) -> Dict[str, Any]:
         """Process a document and add LLM-generated metadata."""
         text = doc_data.get('text', '')
+        file_name = doc_data.get('metadata', {}).get('file_name', 'unknown')
         
         if not text:
+            logger.info(f"    → Empty document, skipping LLM processing")
             return {
                 **doc_data,
                 'summary': 'Empty document',
@@ -250,11 +252,15 @@ class DocumentProcessor:
                 'embedding_text': ''
             }
         
+        logger.info(f"    → Generating summary for {len(text):,} characters...")
+        
         # Generate summary, keywords, and embedding text
         summary_task = self.llm.summarize_document(text, max_length=500)
         keywords_task = self.llm.extract_keywords(text, num_keywords=10)
         
         summary, keywords = await asyncio.gather(summary_task, keywords_task)
+        
+        logger.info(f"    → Generated {len(summary)} char summary and {len(keywords)} keywords: {', '.join(keywords[:3])}{'...' if len(keywords) > 3 else ''}")
         
         # For embedding, use summary + keywords for better representation
         embedding_text = f"{summary} Keywords: {', '.join(keywords)}"

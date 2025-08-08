@@ -147,15 +147,20 @@ class DocumentIndexer:
             metadata = doc_data['metadata']
             file_path = metadata['file_path']
             file_hash = metadata['file_hash']
+            file_name = metadata['file_name']
+            num_chunks = doc_data['num_chunks']
             
+            logger.info(f"    → Checking if document is already indexed...")
             # Check if document already indexed with same hash
             if await self.is_document_indexed(file_path, file_hash):
-                logger.info(f"Document already indexed: {file_path}")
+                logger.info(f"    → Document already indexed with same hash: {file_name}")
                 return False
             
+            logger.info(f"    → Removing old version if exists...")
             # Remove old version if exists
             await self.remove_document(file_path)
             
+            logger.info(f"    → Generating document-level embedding...")
             # Generate embeddings for summary/keywords
             embedding_text = doc_data.get('embedding_text', doc_data.get('summary', ''))
             if embedding_text:
@@ -165,6 +170,9 @@ class DocumentIndexer:
                 first_chunk_text = doc_data['chunks'][0]['text'] if doc_data['chunks'] else ""
                 doc_embedding = await self._generate_embedding(first_chunk_text)
             
+            logger.info(f"    → Generated document embedding ({len(doc_embedding)} dimensions)")
+            
+            logger.info(f"    → Adding document to catalog...")
             # Prepare catalog entry
             catalog_entry = {
                 "file_path": file_path,
@@ -187,11 +195,18 @@ class DocumentIndexer:
             await asyncio.get_event_loop().run_in_executor(
                 self.executor, self.catalog_table.add, catalog_df
             )
+            logger.info(f"    → Document added to catalog")
             
             # Index chunks
             if doc_data['chunks']:
+                logger.info(f"    → Processing {num_chunks} chunks for embedding...")
                 chunk_entries = []
-                for chunk in doc_data['chunks']:
+                
+                # Process chunks with progress logging
+                for i, chunk in enumerate(doc_data['chunks']):
+                    if (i + 1) % 5 == 0 or i == len(doc_data['chunks']) - 1:
+                        logger.info(f"    → Generating embeddings: {i + 1}/{num_chunks} chunks")
+                    
                     # Generate embedding for chunk
                     chunk_embedding = await self._generate_embedding(chunk['text'])
                     
@@ -208,13 +223,17 @@ class DocumentIndexer:
                     }
                     chunk_entries.append(chunk_entry)
                 
+                logger.info(f"    → Storing {num_chunks} chunks to database...")
                 # Add chunks in batch
                 chunks_df = pd.DataFrame(chunk_entries)
                 await asyncio.get_event_loop().run_in_executor(
                     self.executor, self.chunks_table.add, chunks_df
                 )
+                logger.info(f"    → All {num_chunks} chunks stored successfully")
+            else:
+                logger.warning(f"    → No chunks to index for {file_name}")
             
-            logger.info(f"Successfully indexed: {file_path} ({doc_data['num_chunks']} chunks)")
+            logger.info(f"Successfully indexed: {file_name} ({doc_data['num_chunks']} chunks)")
             return True
             
         except Exception as e:

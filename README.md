@@ -6,11 +6,11 @@ A Python-based MCP (Model Context Protocol) server for local document indexing a
 
 - **Real-time Document Monitoring**: Automatically indexes new and modified documents in configured folders
 - **Multi-format Support**: Handles PDF, Word (docx/doc), text, Markdown, and RTF files
-- **Local LLM Integration**: Uses Ollama for document summarization and keyword extraction
+- **Local LLM Integration**: Uses Ollama for document summarization and keyword extraction. Nothing ever leaves your computer
 - **Vector Search**: Semantic search using LanceDB and sentence transformers
 - **MCP Integration**: Exposes search and catalog tools via Model Context Protocol
 - **Incremental Indexing**: Only processes changed files to save resources
-- **macOS Optimized**: Designed for M1/M2 MacBook performance
+- **Performance Optimized**: Designed for decent performance on standard laptops (e.g. M1/M2 MacBook)
 
 ## Installation
 
@@ -35,7 +35,7 @@ ollama pull llama3.2:3b
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/mcp-doc-indexer.git
+git clone https://github.com/yairwein/mcp-doc-indexer.git
 cd mcp-doc-indexer
 
 # Install with uv

@@ -105,25 +105,31 @@ class DocumentIndexerService:
                 logger.warning(f"  → Skipping: File too large ({file_size_mb:.1f}MB > {self.config.max_file_size_mb}MB)")
                 return False
             
-            logger.info(f"  → [1/4] Parsing document ({file_size_mb:.2f}MB)...")
+            logger.info(f"  → [1/3] Parsing document ({file_size_mb:.2f}MB)...")
             
             # Parse document
             doc_data = self.parser.parse_file(file_path)
-            logger.info(f"  → [1/4] ✓ Parsed: {doc_data['total_chars']:,} chars, {doc_data['num_chunks']} chunks, {doc_data['total_tokens']:,} tokens")
+            logger.info(f"  → [1/3] ✓ Parsed: {doc_data['total_chars']:,} chars, {doc_data['num_chunks']} chunks, {doc_data['total_tokens']:,} tokens")
             
-            # Process with LLM
-            logger.info(f"  → [2/4] Processing with LLM ({self.config.llm_model})...")
+            # Check if document is already indexed before expensive LLM processing
+            metadata = doc_data['metadata']
+            if await self.indexer.is_document_indexed(metadata['file_path'], metadata['file_hash']):
+                logger.info(f"  → [2/3] ⟳ Document unchanged (already indexed)")
+                return False
+            
+            # Process with LLM (only if not already indexed)
+            logger.info(f"  → [2/3] Processing with LLM ({self.config.llm_model})...")
             doc_data = await self.processor.process_document(doc_data)
-            logger.info(f"  → [2/4] ✓ Generated summary ({len(doc_data.get('summary', ''))} chars) and {len(doc_data.get('keywords', []))} keywords")
+            logger.info(f"  → [2/3] ✓ Generated summary ({len(doc_data.get('summary', ''))} chars) and {len(doc_data.get('keywords', []))} keywords")
             
             # Index document
-            logger.info(f"  → [3/4] Generating embeddings and indexing to LanceDB...")
+            logger.info(f"  → [3/3] Generating embeddings and indexing to LanceDB...")
             success = await self.indexer.index_document(doc_data)
             
             if success:
-                logger.info(f"  → [4/4] ✓ Successfully indexed document with {doc_data['num_chunks']} chunks")
+                logger.info(f"  → [3/3] ✓ Successfully indexed document with {doc_data['num_chunks']} chunks")
             else:
-                logger.info(f"  → [4/4] ⟳ Document unchanged (already indexed)")
+                logger.info(f"  → [3/3] ⟳ Document unchanged (already indexed)")
             
             return success
             

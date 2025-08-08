@@ -210,9 +210,7 @@ class DocumentIndexerService:
     
     def setup_mcp_server(self) -> FastMCP:
         """Set up the MCP server with tools."""
-        mcp = FastMCP("Document Indexer")
-        mcp.name = "mcp-doc-indexer"
-        mcp.description = "Local document indexing and search with LanceDB"
+        mcp = FastMCP("mcp-doc-indexer", instructions="Local document indexing and search with LanceDB")
         
         # Register tools
         mcp.tool(self.tools.search_documents)
@@ -306,8 +304,8 @@ async def main():
         logger.info(f"Watching folders: {service.config.watch_folders}")
         logger.info(f"Database path: {service.config.lancedb_path}")
         
-        # Run the MCP server using FastMCP's run method
-        await mcp.run()
+        # Run the MCP server in stdio mode for Claude Desktop
+        await mcp.run_stdio_async()
         
     except KeyboardInterrupt:
         logger.info("Interrupted by user")

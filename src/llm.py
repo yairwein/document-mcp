@@ -31,6 +31,11 @@ class LocalLLM:
         else:
             logger.warning(f"Ollama model {self.model} is not available, using fallback")
     
+    @property
+    def is_available(self) -> bool:
+        """Check if the LLM is available."""
+        return self._available if self._available is not None else False
+    
     async def check_availability(self) -> bool:
         """Check if Ollama and the model are available."""
         try:
@@ -227,6 +232,28 @@ Concise version:"""
         
         return keywords
     
+    async def generate(self, prompt: str, max_tokens: int = 1000) -> str:
+        """Generate text from a prompt."""
+        if not self.is_available:
+            # Use fallback response when Ollama is not available
+            return f"[Mock response for: {prompt[:50]}...]"
+        
+        try:
+            response = await self.async_client.generate(
+                model=self.model,
+                prompt=prompt,
+                stream=False
+            )
+            
+            # Handle both dict and direct response
+            if isinstance(response, dict):
+                return response.get('response', '')
+            else:
+                return str(response)
+        except Exception as e:
+            logger.error(f"Error generating text: {e}")
+            return f"[Fallback response for: {prompt[:50]}...]"
+    
     async def close(self):
         """Clean up resources."""
         self.executor.shutdown(wait=False)
@@ -276,3 +303,11 @@ class DocumentProcessor:
         """Process multiple documents in parallel."""
         tasks = [self.process_document(doc) for doc in documents]
         return await asyncio.gather(*tasks)
+    
+    async def _generate_summary(self, text: str, max_length: int = 500) -> str:
+        """Generate summary for text."""
+        return await self.llm.summarize_document(text, max_length=max_length)
+    
+    async def _extract_keywords(self, text: str, max_keywords: int = 10) -> List[str]:
+        """Extract keywords from text."""
+        return await self.llm.extract_keywords(text, num_keywords=max_keywords)

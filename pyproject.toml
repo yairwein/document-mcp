@@ -17,7 +17,8 @@ dependencies = [
     "numpy",
     "pandas",
     "tiktoken",
-    "python-dotenv"
+    "python-dotenv",
+    "psutil>=7.0.0",
 ]
 
 [project.scripts]
@@ -35,5 +36,5 @@ dev-dependencies = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
     "black>=23.0.0",
-    "ruff>=0.1.0"
+    "ruff>=0.1.0",
 ]

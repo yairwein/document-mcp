@@ -255,6 +255,11 @@ class DocumentIndexer:
     async def remove_document(self, file_path: str):
         """Remove a document and its chunks from the index."""
         try:
+            # Check if document exists first
+            info = await self.get_document_info(file_path)
+            if not info:
+                return False
+            
             # Remove from catalog
             query = f"file_path = '{file_path}'"
             await asyncio.get_event_loop().run_in_executor(
@@ -269,8 +274,10 @@ class DocumentIndexer:
             )
             
             logger.info(f"Removed document from index: {file_path}")
+            return True
         except Exception as e:
             logger.error(f"Error removing document {file_path}: {e}")
+            return False
     
     async def search_documents(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Search for documents using semantic search."""
@@ -408,6 +415,21 @@ class DocumentIndexer:
         )
         
         return embedding
+    
+    async def _generate_embeddings_batch(self, texts: List[str]) -> List[np.ndarray]:
+        """Generate embeddings for multiple texts in batch."""
+        if not texts:
+            return []
+        
+        # Run in executor to avoid blocking
+        embeddings = await asyncio.get_event_loop().run_in_executor(
+            self.executor,
+            self.embedding_model.encode,
+            texts
+        )
+        
+        # Convert to list of individual embeddings
+        return [embedding for embedding in embeddings]
     
     async def close(self):
         """Clean up resources."""

@@ -11,18 +11,19 @@ logger = logging.getLogger(__name__)
 
 class SearchDocumentsInput(BaseModel):
     """Input for document search."""
-    query: str = Field(description="Search query text")
-    limit: int = Field(default=10, description="Maximum number of results")
+    query: str = Field(min_length=1, description="Search query text")
+    limit: int = Field(default=10, ge=1, description="Maximum number of results")
     search_type: str = Field(
         default="documents",
+        pattern="^(documents|chunks)$",
         description="Search type: 'documents' for document-level or 'chunks' for chunk-level"
     )
 
 
 class GetCatalogInput(BaseModel):
     """Input for getting catalog."""
-    skip: int = Field(default=0, description="Number of documents to skip")
-    limit: int = Field(default=100, description="Maximum number of documents to return")
+    skip: int = Field(default=0, ge=0, description="Number of documents to skip")
+    limit: int = Field(default=100, ge=1, description="Maximum number of documents to return")
 
 
 class GetDocumentInfoInput(BaseModel):
@@ -50,6 +51,13 @@ class DocumentTools:
         This tool searches through indexed documents using natural language queries.
         It can search at the document level (returning whole documents) or chunk level
         (returning specific passages).
+        
+        Sample queries:
+        - "Find documents about machine learning algorithms"
+        - "Search for API documentation"  
+        - "Show me code related to database connections"
+        - "Find text about authentication and security"
+        - "Look for configuration files and setup instructions"
         """
         try:
             if input.search_type == "chunks":
@@ -101,7 +109,11 @@ class DocumentTools:
             logger.error(f"Search error: {e}")
             return {
                 "success": False,
-                "error": str(e)
+                "error": str(e),
+                "query": input.query,
+                "search_type": input.search_type,
+                "total_results": 0,
+                "results": []
             }
     
     async def get_catalog(self, ctx: Context, input: GetCatalogInput) -> Dict[str, Any]:
@@ -111,6 +123,12 @@ class DocumentTools:
         Returns a catalog of all documents that have been indexed, including
         their metadata, summaries, and keywords. Useful for browsing the
         document collection.
+        
+        Sample usage:
+        - Browse all indexed documents to see what's available
+        - Get an overview of the document collection with metadata
+        - Check which file types are indexed and their summaries
+        - Find documents by scanning through titles and keywords
         """
         try:
             documents = await self.indexer.get_catalog(input.skip, input.limit)
@@ -159,6 +177,12 @@ class DocumentTools:
         
         Returns comprehensive information about a document including its
         summary, keywords, chunk count, and indexing metadata.
+        
+        Sample usage:
+        - Get details about "/path/to/my/important-document.pdf"
+        - Check metadata for "src/main.py" including chunk count and size
+        - View summary and keywords for "docs/README.md"
+        - Inspect indexing status and timestamps for any file
         """
         try:
             doc_info = await self.indexer.get_document_info(input.file_path)
@@ -203,6 +227,12 @@ class DocumentTools:
         This will reparse the document, regenerate summaries and embeddings,
         and update the index. Useful when a document has been modified or
         if you want to reprocess with updated settings.
+        
+        Sample usage:
+        - Reindex "/home/user/updated-report.pdf" after making changes
+        - Force reprocessing of "config/settings.json" with new LLM model
+        - Update embeddings for "docs/api-spec.md" after content changes
+        - Re-summarize "src/complex-module.py" with improved prompts
         """
         try:
             file_path = Path(input.file_path)
@@ -254,6 +284,13 @@ class DocumentTools:
         
         Returns information about the index including document count,
         chunk count, storage size, and file type distribution.
+        
+        Sample usage:
+        - Check how many documents are currently indexed
+        - View storage usage and database size
+        - See distribution of file types (PDF, markdown, code files, etc.)
+        - Monitor indexing progress and collection health
+        - Get overview of total chunks and tokens processed
         """
         try:
             stats = await self.indexer.get_stats()

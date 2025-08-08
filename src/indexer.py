@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import lancedb
 from sentence_transformers import SentenceTransformer
 import asyncio
@@ -47,35 +48,35 @@ class DocumentIndexer:
         # Get embedding dimension
         embedding_dim = self.embedding_model.get_sentence_embedding_dimension()
         
-        # Catalog table schema - using object for embedding column
-        catalog_schema = {
-            "file_path": str,
-            "file_name": str,
-            "file_hash": str,
-            "file_size": int,
-            "file_type": str,
-            "modified_time": str,
-            "indexed_time": str,
-            "summary": str,
-            "keywords": str,  # JSON array as string
-            "total_chunks": int,
-            "total_chars": int,
-            "total_tokens": int,
-            "embedding": object  # Vector for document-level search
-        }
+        # Create PyArrow schemas with proper vector types
+        catalog_schema = pa.schema([
+            pa.field("file_path", pa.string()),
+            pa.field("file_name", pa.string()),
+            pa.field("file_hash", pa.string()),
+            pa.field("file_size", pa.int64()),
+            pa.field("file_type", pa.string()),
+            pa.field("modified_time", pa.string()),
+            pa.field("indexed_time", pa.string()),
+            pa.field("summary", pa.string()),
+            pa.field("keywords", pa.string()),  # JSON array as string
+            pa.field("total_chunks", pa.int64()),
+            pa.field("total_chars", pa.int64()),
+            pa.field("total_tokens", pa.int64()),
+            pa.field("embedding", pa.list_(pa.float32(), embedding_dim))  # Fixed-size vector
+        ])
         
-        # Chunks table schema - using object for embedding column
-        chunks_schema = {
-            "file_path": str,
-            "file_hash": str,
-            "chunk_id": int,
-            "chunk_text": str,
-            "start_pos": int,
-            "end_pos": int,
-            "char_count": int,
-            "token_count": int,
-            "embedding": object  # Vector for chunk-level search
-        }
+        # Chunks table schema with proper vector type
+        chunks_schema = pa.schema([
+            pa.field("file_path", pa.string()),
+            pa.field("file_hash", pa.string()),
+            pa.field("chunk_id", pa.int64()),
+            pa.field("chunk_text", pa.string()),
+            pa.field("start_pos", pa.int64()),
+            pa.field("end_pos", pa.int64()),
+            pa.field("char_count", pa.int64()),
+            pa.field("token_count", pa.int64()),
+            pa.field("embedding", pa.list_(pa.float32(), embedding_dim))  # Fixed-size vector
+        ])
         
         # Check if tables exist
         existing_tables = await asyncio.get_event_loop().run_in_executor(
@@ -83,11 +84,11 @@ class DocumentIndexer:
         )
         
         if "catalog" not in existing_tables:
-            # Create catalog table with initial data
+            # Create catalog table with initial data using proper schema
             logger.info("Creating catalog table")
             # Create a single row with dummy data to establish schema
-            dummy_embedding = np.zeros(embedding_dim, dtype=np.float32)
-            initial_data = pd.DataFrame({
+            dummy_embedding = np.zeros(embedding_dim, dtype=np.float32).tolist()
+            initial_data = pa.table({
                 "file_path": ["dummy"],
                 "file_name": ["dummy"],
                 "file_hash": ["dummy"],
@@ -101,7 +102,8 @@ class DocumentIndexer:
                 "total_chars": [0],
                 "total_tokens": [0],
                 "embedding": [dummy_embedding]
-            })
+            }, schema=catalog_schema)
+            
             self.catalog_table = await asyncio.get_event_loop().run_in_executor(
                 self.executor, self.db.create_table, "catalog", initial_data
             )
@@ -115,10 +117,10 @@ class DocumentIndexer:
             )
         
         if "chunks" not in existing_tables:
-            # Create chunks table with initial data
+            # Create chunks table with initial data using proper schema
             logger.info("Creating chunks table")
-            dummy_embedding = np.zeros(embedding_dim, dtype=np.float32)
-            initial_data = pd.DataFrame({
+            dummy_embedding = np.zeros(embedding_dim, dtype=np.float32).tolist()
+            initial_data = pa.table({
                 "file_path": ["dummy"],
                 "file_hash": ["dummy"],
                 "chunk_id": [0],
@@ -128,7 +130,8 @@ class DocumentIndexer:
                 "char_count": [0],
                 "token_count": [0],
                 "embedding": [dummy_embedding]
-            })
+            }, schema=chunks_schema)
+            
             self.chunks_table = await asyncio.get_event_loop().run_in_executor(
                 self.executor, self.db.create_table, "chunks", initial_data
             )
@@ -187,7 +190,7 @@ class DocumentIndexer:
                 "total_chunks": doc_data['num_chunks'],
                 "total_chars": doc_data['total_chars'],
                 "total_tokens": doc_data['total_tokens'],
-                "embedding": doc_embedding.astype(np.float32)
+                "embedding": doc_embedding.astype(np.float32).tolist()
             }
             
             # Add to catalog
@@ -219,7 +222,7 @@ class DocumentIndexer:
                         "end_pos": chunk['end_pos'],
                         "char_count": chunk['char_count'],
                         "token_count": chunk['token_count'],
-                        "embedding": chunk_embedding.astype(np.float32)
+                        "embedding": chunk_embedding.astype(np.float32).tolist()
                     }
                     chunk_entries.append(chunk_entry)
                 

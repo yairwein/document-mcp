@@ -1,7 +1,8 @@
 """MCP tool implementations for document indexing."""
 
+import json
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from pathlib import Path
 from fastmcp import Context
 from pydantic import BaseModel, Field
@@ -44,7 +45,7 @@ class DocumentTools:
         self.parser = parser
         self.processor = processor
     
-    async def search_documents(self, ctx: Context, input: SearchDocumentsInput) -> Dict[str, Any]:
+    async def search_documents(self, ctx: Context, input: Union[SearchDocumentsInput, dict, str]) -> Dict[str, Any]:
         """
         Search for documents or chunks using semantic search.
         
@@ -60,6 +61,14 @@ class DocumentTools:
         - "Look for configuration files and setup instructions"
         """
         try:
+            # Handle different input types from MCP clients
+            if isinstance(input, str):
+                input_dict = json.loads(input)
+                input = SearchDocumentsInput.model_validate(input_dict)
+            elif isinstance(input, dict):
+                input = SearchDocumentsInput.model_validate(input)
+            # If it's already a SearchDocumentsInput object, use it as-is
+            
             if input.search_type == "chunks":
                 results = await self.indexer.search_chunks(input.query, input.limit)
                 
@@ -116,7 +125,7 @@ class DocumentTools:
                 "results": []
             }
     
-    async def get_catalog(self, ctx: Context, input: GetCatalogInput) -> Dict[str, Any]:
+    async def get_catalog(self, ctx: Context, input: Union[GetCatalogInput, dict, str]) -> Dict[str, Any]:
         """
         Get a list of all indexed documents with their summaries.
         
@@ -131,6 +140,14 @@ class DocumentTools:
         - Find documents by scanning through titles and keywords
         """
         try:
+            # Handle different input types from MCP clients
+            if isinstance(input, str):
+                input_dict = json.loads(input)
+                input = GetCatalogInput.model_validate(input_dict)
+            elif isinstance(input, dict):
+                input = GetCatalogInput.model_validate(input)
+            # If it's already a GetCatalogInput object, use it as-is
+            
             documents = await self.indexer.get_catalog(input.skip, input.limit)
             
             # Get stats
@@ -171,7 +188,7 @@ class DocumentTools:
                 "error": str(e)
             }
     
-    async def get_document_info(self, ctx: Context, input: GetDocumentInfoInput) -> Dict[str, Any]:
+    async def get_document_info(self, ctx: Context, input: Union[GetDocumentInfoInput, dict, str]) -> Dict[str, Any]:
         """
         Get detailed information about a specific indexed document.
         
@@ -185,6 +202,14 @@ class DocumentTools:
         - Inspect indexing status and timestamps for any file
         """
         try:
+            # Handle different input types from MCP clients
+            if isinstance(input, str):
+                input_dict = json.loads(input)
+                input = GetDocumentInfoInput.model_validate(input_dict)
+            elif isinstance(input, dict):
+                input = GetDocumentInfoInput.model_validate(input)
+            # If it's already a GetDocumentInfoInput object, use it as-is
+            
             doc_info = await self.indexer.get_document_info(input.file_path)
             
             if not doc_info:
@@ -220,7 +245,7 @@ class DocumentTools:
                 "error": str(e)
             }
     
-    async def reindex_document(self, ctx: Context, input: ReindexDocumentInput) -> Dict[str, Any]:
+    async def reindex_document(self, ctx: Context, input: Union[ReindexDocumentInput, dict, str]) -> Dict[str, Any]:
         """
         Force reindexing of a specific document file.
         
@@ -235,6 +260,14 @@ class DocumentTools:
         - Re-summarize "src/complex-module.py" with improved prompts
         """
         try:
+            # Handle different input types from MCP clients
+            if isinstance(input, str):
+                input_dict = json.loads(input)
+                input = ReindexDocumentInput.model_validate(input_dict)
+            elif isinstance(input, dict):
+                input = ReindexDocumentInput.model_validate(input)
+            # If it's already a ReindexDocumentInput object, use it as-is
+            
             file_path = Path(input.file_path)
             
             if not file_path.exists():

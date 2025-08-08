@@ -72,7 +72,7 @@ class TestDocumentTools:
         assert 'success' in result
         assert 'search_type' in result
         assert 'results' in result
-        assert isinstance(result['results'], list)
+        assert isinstance(result['results'], dict)  # chunks are grouped by file path
         
         # If search succeeded, verify content
         if result['success']:

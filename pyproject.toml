@@ -16,6 +16,7 @@ dependencies = [
     "asyncio",
     "numpy",
     "pandas",
+    "pyarrow",
     "tiktoken",
     "python-dotenv",
     "psutil>=7.0.0",

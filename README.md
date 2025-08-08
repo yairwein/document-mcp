@@ -98,8 +98,14 @@ Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/
   "mcpServers": {
     "doc-indexer": {
       "command": "uv",
-      "args": ["run", "python", "-m", "src.main"],
-      "cwd": "/path/to/mcp-doc-indexer",
+      "args": [
+        "run",
+        "--directory",
+        "/path/to/mcp-doc-indexer",
+        "python",
+        "-m",
+        "src.main"
+      ],
       "env": {
         "WATCH_FOLDERS": "/Users/me/Documents,/Users/me/Research",
         "LANCEDB_PATH": "/Users/me/.mcp-doc-index",
